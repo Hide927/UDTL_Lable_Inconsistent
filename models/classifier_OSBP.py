@@ -11,8 +11,9 @@ def grl_hook(coeff):
         return -coeff * grad.clone()
     return fun1
 
+
 class ClassifierNet(nn.Module):
-    def __init__(self, in_feature,output_num, max_iter=10000.0, trade_off_adversarial='Step', lam_adversarial=1.0):
+    def __init__(self, in_feature, output_num, max_iter=10000.0, trade_off_adversarial='Step', lam_adversarial=1.0):
         super(ClassifierNet, self).__init__()
         self.fc = nn.Linear(in_feature, output_num)
 
@@ -32,7 +33,8 @@ class ClassifierNet(nn.Module):
         if self.trade_off_adversarial == 'Cons':
             coeff = self.lam_adversarial
         elif self.trade_off_adversarial == 'Step':
-            coeff = calc_coeff(self.iter_num, self.high, self.low, self.alpha, self.max_iter)
+            coeff = calc_coeff(self.iter_num, self.high,
+                               self.low, self.alpha, self.max_iter)
         else:
             raise Exception("loss not implement")
         x = x * 1.0

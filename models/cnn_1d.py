@@ -1,5 +1,3 @@
-#!/usr/bin/python
-# -*- coding:utf-8 -*-
 from torch import nn
 import warnings
 
@@ -16,13 +14,12 @@ class CNN(nn.Module):
             nn.BatchNorm1d(16),
             nn.ReLU(inplace=True))
 
-
         self.layer2 = nn.Sequential(
             nn.Conv1d(16, 32, kernel_size=3),  # 32, 24, 24
             nn.BatchNorm1d(32),
             nn.ReLU(inplace=True),
             nn.MaxPool1d(kernel_size=2, stride=2),
-            )  # 32, 12,12     (24-2) /2 +1
+        )  # 32, 12,12     (24-2) /2 +1
 
         self.layer3 = nn.Sequential(
             nn.Conv1d(32, 64, kernel_size=3),  # 64,10,10

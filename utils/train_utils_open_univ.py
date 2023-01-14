@@ -1,6 +1,3 @@
-#!/usr/bin/python
-# -*- coding:utf-8 -*-
-
 import logging
 import os
 import time
@@ -12,7 +9,8 @@ from utils.counter import AccuracyCounter
 import torch.nn.functional as F
 from utils.lib import *
 
-#Adapted from https://github.com/YU1ut/openset-DA and https://github.com/thuml/Universal-Domain-Adaptation
+# Adapted from https://github.com/YU1ut/openset-DA and https://github.com/thuml/Universal-Domain-Adaptation
+
 
 class train_utils_open_univ(object):
     def __init__(self, args, save_dir):
@@ -39,17 +37,14 @@ class train_utils_open_univ(object):
             self.device_count = 1
             logging.info('using {} cpu'.format(self.device_count))
 
-
         # Load the datasets
         Dataset = getattr(datasets, args.data_name)
         self.datasets = {}
         if isinstance(args.transfer_task[0], str):
-           #print(args.transfer_task)
-           args.transfer_task = eval("".join(args.transfer_task))
-        self.datasets['source_train'], self.datasets['source_val'], self.datasets['target_train'], self.datasets[
-            'target_val'], self.num_classes = Dataset(args.data_dir, args.transfer_task,
-                                                      args.inconsistent, args.normlizetype).data_split(
-            transfer_learning=True)
+            # print(args.transfer_task)
+            args.transfer_task = eval("".join(args.transfer_task))
+        self.datasets['source_train'], self.datasets['source_val'], self.datasets['target_train'], self.datasets['target_val'], self.num_classes = Dataset(
+            args.data_dir, args.transfer_task, args.inconsistent, args.normlizetype).data_split(transfer_learning=True)
 
         self.dataloaders = {x: torch.utils.data.DataLoader(self.datasets[x], batch_size=args.batch_size,
                                                            shuffle=(True if x.split('_')[1] == 'train' else False),
@@ -78,7 +73,7 @@ class train_utils_open_univ(object):
                                                                            trade_off_adversarial=args.trade_off_adversarial,
                                                                            lam_adversarial=args.lam_adversarial
                                                                            )
-        else:
+        else:  # UAN
             if args.bottleneck:
                 self.classifier_layer = nn.Linear(args.bottleneck_num, self.num_classes)
                 self.AdversarialNet = getattr(models, 'AdversarialNet')(in_feature=args.bottleneck_num,
@@ -97,9 +92,8 @@ class train_utils_open_univ(object):
                                                                         trade_off_adversarial=args.trade_off_adversarial,
                                                                         lam_adversarial=args.lam_adversarial
                                                                         )
-                self.AdversarialNet_auxiliary = getattr(models, 'AdversarialNet_auxiliary')(
-                    in_feature=self.model.output_num(),
-                    hidden_size=args.hidden_size)
+                self.AdversarialNet_auxiliary = getattr(models, 'AdversarialNet_auxiliary')(in_feature=self.model.output_num(), hidden_size=args.hidden_size)
+        
         if args.bottleneck:
             self.model_all = nn.Sequential(self.model, self.bottleneck_layer, self.classifier_layer)
         else:
@@ -135,6 +129,7 @@ class train_utils_open_univ(object):
                                   {"params": self.classifier_layer.parameters(), "lr": args.lr},
                                   {"params": self.AdversarialNet_auxiliary.parameters(), "lr": args.lr},
                                   {"params": self.AdversarialNet.parameters(), "lr": args.lr}]
+        
         # Define the optimizer
         if args.opt == 'sgd':
             self.optimizer = optim.SGD(parameter_list, lr=args.lr,
@@ -144,7 +139,6 @@ class train_utils_open_univ(object):
                                         weight_decay=args.weight_decay)
         else:
             raise Exception("optimizer not implement")
-
 
         # Define the learning rate decay
         if args.lr_scheduler == 'step':
@@ -160,9 +154,7 @@ class train_utils_open_univ(object):
         else:
             raise Exception("lr schedule not implement")
 
-
         self.start_epoch = 0
-
 
         # Invert the model and define the loss
         self.model.to(self.device)
@@ -177,7 +169,6 @@ class train_utils_open_univ(object):
             self.inconsistent_loss = nn.BCELoss()
 
         self.criterion = nn.CrossEntropyLoss()
-
 
     def train(self):
         """
@@ -194,7 +185,9 @@ class train_utils_open_univ(object):
         step_start = time.time()
 
         for epoch in range(self.start_epoch, args.max_epoch):
+
             logging.info('-'*5 + 'Epoch {}/{}'.format(epoch, args.max_epoch - 1) + '-'*5)
+
             # Update the learning rate
             if self.lr_scheduler is not None:
                 logging.info('current lr: {}'.format(self.lr_scheduler.get_lr()))
@@ -203,8 +196,10 @@ class train_utils_open_univ(object):
 
             iter_target = iter(self.dataloaders['target_train'])
             len_target_loader = len(self.dataloaders['target_train'])
+
             # Each epoch has a training and val phase
             for phase in ['source_train', 'source_val', 'target_val']:
+
                 # Define the temp variable
                 epoch_start = time.time()
                 epoch_acc = 0
@@ -219,7 +214,7 @@ class train_utils_open_univ(object):
                     self.model.train()
                     if args.bottleneck:
                         self.bottleneck_layer.train()
-                    if args.inconsistent=="UAN":
+                    if args.inconsistent == "UAN":
                         self.AdversarialNet.train()
                         self.AdversarialNet_auxiliary.train()
                     self.classifier_layer.train()
@@ -227,18 +222,19 @@ class train_utils_open_univ(object):
                     self.model.eval()
                     if args.bottleneck:
                         self.bottleneck_layer.eval()
-                    if args.inconsistent=="UAN":
+                    if args.inconsistent == "UAN":
                         self.AdversarialNet.eval()
                         self.AdversarialNet_auxiliary.eval()
                     self.classifier_layer.eval()
 
                 for batch_idx, (inputs, labels) in enumerate(self.dataloaders[phase]):
+
                     if phase != 'source_train':
                         inputs = inputs.to(self.device)
                         labels = labels.to(self.device)
                     else:
                         source_inputs = inputs
-                        target_inputs, _ = iter_target.next()
+                        target_inputs, _ = next(iter_target)
                         inputs = torch.cat((source_inputs, target_inputs), dim=0)
                         inputs = inputs.to(self.device)
                         labels = labels.to(self.device)
@@ -246,97 +242,97 @@ class train_utils_open_univ(object):
                         iter_target = iter(self.dataloaders['target_train'])
 
                     with torch.set_grad_enabled(phase == 'source_train'):
+
                         # forward
                         features = self.model(inputs)
                         if args.bottleneck:
                             features = self.bottleneck_layer(features)
-                        outputs = self.classifier_layer(features)
+                        outputs = self.classifier_layer(features)  # 线性输出
+# -------------------------------------------------------------------------------------------------
                         if phase != 'source_train':
                             logits = outputs
                             if not (phase == 'target_val' and args.inconsistent == "UAN"):
                                 loss = self.criterion(logits, labels)
                         else:
+                            # --------------- 训练阶段 ---------------
                             logits = outputs.narrow(0, 0, labels.size(0))
-                            classifier_loss = self.criterion(logits, labels)
+                            classifier_loss = self.criterion(logits, labels)  # 源域数据分类损失
 
                             if args.inconsistent == 'OSBP':
-                                output_t = self.classifier_layer(
+                                output_t = self.classifier_layer(  # 目标域数据分类输出
                                     features.narrow(0, labels.size(0), inputs.size(0) - labels.size(0)), adaption=True)
-
-                                output_t_prob_unk = F.softmax(output_t, dim=1)[:, -1]
+                                output_t_prob_unk = F.softmax(output_t, dim=1)[:, -1]  # 目标域数据 C+1 概率
                                 # print(output_t_prob_unk)
-                                inconsistent_loss = self.inconsistent_loss(output_t_prob_unk,
-                                                                                                   torch.tensor([
-                                                                                                                    args.th] * args.batch_size).to(
-                                                                                                       self.device))  # th为阈值
+                                inconsistent_loss = self.inconsistent_loss(output_t_prob_unk, 
+                                                                    torch.tensor([args.th] * args.batch_size).to(self.device))  # th为阈值
                             else:
+                                # 对比了 UDA 的源码
+                                # 个人觉得此处应该使用 self.AdversarialNet() 
+                                # 不加 detach 输出的是对抗性的 domain_prob，加 detach 输出的是非对抗性的 domain_prob
                                 domain_prob_source = self.AdversarialNet_auxiliary.forward(
-                                    features.narrow(0, 0, labels.size(0)).detach())
+                                    features.narrow(0, 0, labels.size(0)).detach())  # 源域非对抗性域判别输出
                                 domain_prob_target = self.AdversarialNet_auxiliary.forward(
-                                    features.narrow(0, labels.size(0), inputs.size(0) - labels.size(0)).detach())
+                                    features.narrow(0, labels.size(0), inputs.size(0) - labels.size(0)).detach())  # 目标域非对抗性域判别输出
 
                                 source_share_weight = get_source_share_weight(
                                     domain_prob_source, outputs.narrow(0, 0, labels.size(0)), domain_temperature=1.0,
                                     class_temperature=10.0)
-                                source_share_weight = normalize_weight(source_share_weight)
+                                source_share_weight = normalize_weight(source_share_weight)  # Ws
                                 target_share_weight = get_target_share_weight(
-                                    domain_prob_target,
-                                    outputs.narrow(0, labels.size(0), inputs.size(0) - labels.size(0)),
-                                    domain_temperature=1.0,
-                                    class_temperature=1.0)
+                                    domain_prob_target, outputs.narrow(0, labels.size(0), inputs.size(0) - labels.size(0)),
+                                    domain_temperature=1.0, class_temperature=1.0)
+                                target_share_weight = normalize_weight(target_share_weight)  # Wt
 
-                                target_share_weight = normalize_weight(target_share_weight)
                                 adv_loss = torch.zeros(1, 1).to(self.device)
                                 adv_loss_auxiliary = torch.zeros(1, 1).to(self.device)
 
+                                # 对抗性判别损失(加权)
                                 tmp = source_share_weight * nn.BCELoss(reduction='none')(
-                                    domain_prob_source,
-                                    torch.ones_like(domain_prob_source))
+                                    domain_prob_source, torch.ones_like(domain_prob_source))
                                 adv_loss += torch.mean(tmp, dim=0, keepdim=True)
                                 tmp = target_share_weight * nn.BCELoss(reduction='none')(
-                                    domain_prob_target,
-                                    torch.zeros_like(domain_prob_target))
+                                    domain_prob_target, torch.zeros_like(domain_prob_target))
                                 adv_loss += torch.mean(tmp, dim=0, keepdim=True)
 
-                                adv_loss_auxiliary += nn.BCELoss()(domain_prob_source,
-                                                                   torch.ones_like(
-                                                                       domain_prob_source))
-                                adv_loss_auxiliary += nn.BCELoss()(domain_prob_target,
-                                                                   torch.zeros_like(
-                                                                       domain_prob_target))
-                                inconsistent_loss = adv_loss + adv_loss_auxiliary
-                            loss = classifier_loss + inconsistent_loss
+                                # 非对抗性判别损失(不加权)
+                                adv_loss_auxiliary += nn.BCELoss()(domain_prob_source, torch.ones_like(domain_prob_source))
+                                adv_loss_auxiliary += nn.BCELoss()(domain_prob_target, torch.zeros_like(domain_prob_target))
 
+                                inconsistent_loss = adv_loss + adv_loss_auxiliary
+
+                            loss = classifier_loss + inconsistent_loss
+# -------------------------------------------------------------------------------------------------
+                        # target val 指标
                         if phase == 'target_val' and args.inconsistent == "OSBP":
                             loss_temp = loss.item() * labels.size(0)
                             epoch_loss += loss_temp
                             epoch_length += labels.size(0)
                             for (each_predict, each_label) in zip(logits, labels.cpu()):
-                                    counters[each_label].Ntotal += 1.0
-
-                                    each_pred_id = np.argmax(each_predict.cpu())
-                                    if each_pred_id == each_label:
-                                        counters[each_label].Ncorrect += 1.0
+                                counters[each_label].Ntotal += 1.0  # 每类的个数
+                                each_pred_id = np.argmax(each_predict.cpu())
+                                if each_pred_id == each_label:
+                                    counters[each_label].Ncorrect += 1.0  # 每类正确数
                         elif phase == 'target_val' and args.inconsistent == "UAN":
-                            for (each_predict, each_label,each_target_share_weight) in zip(logits, labels.cpu(), target_share_weight):
-                                    if each_label < self.num_classes:
-                                        counters[each_label].Ntotal += 1.0
-                                        each_pred_id = np.argmax(each_predict.cpu())
-                                        #print(each_target_share_weight)
-                                        if not (each_target_share_weight[0] < args.th) and each_pred_id == each_label:
-                                            counters[each_label].Ncorrect += 1.0
-                                    else:
-                                        counters[-1].Ntotal += 1.0
-                                        if each_target_share_weight[0] > args.th:
-                                            counters[-1].Ncorrect += 1.0
-                        else:
+                            for (each_predict, each_label, each_target_share_weight) in zip(logits, labels.cpu(), target_share_weight):
+                                if each_label < self.num_classes:  # 属于源域中的已知类
+                                    counters[each_label].Ntotal += 1.0  # 每类个数
+                                    each_pred_id = np.argmax(each_predict.cpu())
+                                    # print(each_target_share_weight)
+                                    if not (each_target_share_weight[0] < args.th) and each_pred_id == each_label:  # 大于阈值且分类正确
+                                        counters[each_label].Ncorrect += 1.0
+                                else:
+                                    counters[-1].Ntotal += 1.0  # 未知类样本个数
+                                    if each_target_share_weight[0] < args.th:  # 小于阈值说明是未知类
+                                        counters[-1].Ncorrect += 1.0
+                        # source train and val 指标
+                        else:  
                             pred = logits.argmax(dim=1)
                             correct = torch.eq(pred, labels).float().sum().item()
                             loss_temp = loss.item() * labels.size(0)
                             epoch_loss += loss_temp
                             epoch_acc += correct
                             epoch_length += labels.size(0)
-
+# -------------------------------------------------------------------------------------------------
                         # Calculate the training information
                         if phase == 'source_train':
                             # backward
@@ -347,6 +343,7 @@ class train_utils_open_univ(object):
                             batch_loss += loss_temp
                             batch_acc += correct
                             batch_count += labels.size(0)
+
                             # Print the training information
                             if step % args.print_step == 0:
                                 batch_loss = batch_loss / batch_count
@@ -357,76 +354,62 @@ class train_utils_open_univ(object):
                                 batch_time = train_time / args.print_step if step != 0 else train_time
                                 sample_per_sec = 1.0 * batch_count / train_time
                                 logging.info('Epoch: {} [{}/{}], Train Loss: {:.4f} Train Acc: {:.4f},'
-                                             '{:.1f} examples/sec {:.2f} sec/batch'.format(
-                                    epoch, batch_idx * len(labels), len(self.dataloaders[phase].dataset),
-                                    batch_loss, batch_acc, sample_per_sec, batch_time
-                                ))
+                                             '{:.1f} samples/sec {:.2f} sec/batch'.format(
+                                                 epoch, batch_idx * len(labels), 
+                                                 len(self.dataloaders[phase].dataset),
+                                                 batch_loss, batch_acc, sample_per_sec, batch_time
+                                             ))
                                 batch_acc = 0
                                 batch_loss = 0.0
                                 batch_count = 0
                             step += 1
-            if phase == 'target_val':
-                correct = [x.Ncorrect for x in counters]
-                amount = [x.Ntotal for x in counters]
-                common_acc = np.sum(correct[0:-1]) / np.sum(amount[0:-1])
-                outlier_acc = correct[-1] / amount[-1]
-                acc_tests = [x.reportAccuracy() for x in counters if not np.isnan(x.reportAccuracy())]
-                acc_class = torch.ones(1, 1) * np.mean(acc_tests)
-                acc_class = acc_class[0][0]
-                acc_all = np.sum(correct[0:]) / np.sum(amount[0:])
-                hscore = 2 * common_acc * outlier_acc / (common_acc + outlier_acc)
-                if args.inconsistent == "OSBP":
-                    epoch_loss = epoch_loss / epoch_length
-                    logging.info(
-                        'Epoch: {} {}-Loss: {:.4f} {}-common_acc: {:.4f} outlier_acc: {:.4f} acc_class: {:.4f} acc_all: {:.4f} hscore: {:.4f}, Cost {:.1f} sec'.format(
-                            epoch, phase, epoch_loss, phase, common_acc, outlier_acc, acc_class, acc_all, hscore, time.time() - epoch_start
-                        ))
+# -------------------------------------------------------------------------------------------------
+                if phase == 'target_val':
+                    correct = [x.Ncorrect for x in counters]
+                    amount = [x.Ntotal for x in counters]
+                    common_acc = np.sum(correct[0:-1]) / np.sum(amount[0:-1])  # 共享类准确率
+                    outlier_acc = correct[-1] / amount[-1]  # 未知类准确率
+                    acc_tests = [x.reportAccuracy()
+                                for x in counters if not np.isnan(x.reportAccuracy())]
+                    acc_class = torch.ones(1, 1) * np.mean(acc_tests)
+                    acc_class = acc_class[0][0]  # 类平均准确率
+                    acc_all = np.sum(correct[0:]) / np.sum(amount[0:])  # 总准确率
+                    hscore = 2 * common_acc * outlier_acc / (common_acc + outlier_acc)
+                    if args.inconsistent == "OSBP":
+                        epoch_loss = epoch_loss / epoch_length
+                        logging.info(
+                            'Epoch: {} {}-Loss: {:.4f} {}-common_acc: {:.4f} outlier_acc: {:.4f} acc_class: {:.4f} acc_all: {:.4f} hscore: {:.4f}, Cost {:.1f} sec'.format(
+                                epoch, phase, epoch_loss, phase, common_acc, outlier_acc, acc_class, acc_all, hscore, time.time() - epoch_start))
+                    else:
+                        logging.info(
+                            'Epoch: {} {}-common_acc: {:.4f} outlier_acc: {:.4f} acc_class: {:.4f} acc_all: {:.4f} hscore: {:.4f}, Cost {:.1f} sec'.format(
+                                epoch, phase, common_acc, outlier_acc, acc_class, acc_all, hscore, time.time() - epoch_start))
+                    
+                    # save the checkpoint for other learning
+                    model_state_dic = self.model_all.state_dict()
+                    # save the best model according to the val accuracy
+
+                    if hscore > best_hscore:
+                        best_hscore = hscore
+                        logging.info(
+                            "save best model_hscore epoch {}, common_acc: {:.4f} outlier_acc: {:.4f} acc_class: {:.4f} acc_all: {:.4f} best_hscore: {:.4f},".format(
+                                epoch, common_acc, outlier_acc, acc_class, acc_all, best_hscore))
+                        torch.save(model_state_dic, os.path.join(self.save_dir,
+                                                                '{}-{:.4f}-{:.4f}-{:.4f}-{:.4f}-{:.4f}.pth'.format(
+                                                                    epoch, common_acc, outlier_acc, acc_class, acc_all, best_hscore)))
+                    if epoch > args.max_epoch - 2:
+                        logging.info(
+                            "save last model epoch {}, common_acc: {:.4f} outlier_acc: {:.4f} acc_class: {:.4f} acc_all: {:.4f} hscore: {:.4f}".format(
+                                epoch, common_acc, outlier_acc, acc_class, acc_all, hscore))
+                        torch.save(model_state_dic, os.path.join(self.save_dir,
+                                                                '{}-{:.4f}-{:.4f}-{:.4f}-{:.4f}-{:.4f}.pth'.format(
+                                                                    epoch, common_acc, outlier_acc, acc_class, acc_all, hscore)))
                 else:
-                    logging.info(
-                        'Epoch: {} {}-common_acc: {:.4f} outlier_acc: {:.4f} acc_class: {:.4f} acc_all: {:.4f} hscore: {:.4f}, Cost {:.1f} sec'.format(
-                            epoch, phase, common_acc, outlier_acc, acc_class, acc_all, hscore, time.time() - epoch_start
-                        ))
-                # save the checkpoint for other learning
-                model_state_dic = self.model_all.state_dict()
-                # save the best model according to the val accuracy
+                    epoch_loss = epoch_loss / epoch_length
+                    epoch_acc = epoch_acc / epoch_length
 
-                if hscore > best_hscore:
-                    best_hscore = hscore
-                    logging.info(
-                "save best model_hscore epoch {}, common_acc: {:.4f} outlier_acc: {:.4f} acc_class: {:.4f} acc_all: {:.4f} best_hscore: {:.4f},".format(
-                            epoch, common_acc, outlier_acc, acc_class, acc_all, best_hscore))
-                    torch.save(model_state_dic, os.path.join(self.save_dir,
-                                                             '{}-{:.4f}-{:.4f}-{:.4f}-{:.4f}-{:.4f}.pth'.format(
-                                                                 epoch, common_acc, outlier_acc,acc_class, acc_all,best_hscore)))
-                if epoch > args.max_epoch - 2:
-                    logging.info(
-                "save last model epoch {}, common_acc: {:.4f} outlier_acc: {:.4f} acc_class: {:.4f} acc_all: {:.4f} hscore: {:.4f}".format(
-                            epoch, common_acc, outlier_acc, acc_class, acc_all, hscore))
-                    torch.save(model_state_dic, os.path.join(self.save_dir,
-                                                             '{}-{:.4f}-{:.4f}-{:.4f}-{:.4f}-{:.4f}.pth'.format(
-                                                                 epoch, common_acc, outlier_acc,acc_class, acc_all,hscore)))
-                # Print the train and val information via each epoch
-            else:
-                epoch_loss = epoch_loss / epoch_length
-                epoch_acc = epoch_acc / epoch_length
-
-                logging.info('Epoch: {} {}-Loss: {:.4f} {}-Acc: {:.4f}, Cost {:.1f} sec'.format(
-                    epoch, phase, epoch_loss, phase, epoch_acc, time.time() - epoch_start
-                ))
+                    logging.info('Epoch: {} {}-Loss: {:.4f} {}-Acc: {:.4f}, Cost {:.1f} sec'.format(
+                        epoch, phase, epoch_loss, phase, epoch_acc, time.time() - epoch_start))
 
             if self.lr_scheduler is not None:
                 self.lr_scheduler.step()
-
-
-
-
-
-
-
-
-
-
-
-
-
-

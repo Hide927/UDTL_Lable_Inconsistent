@@ -1,4 +1,6 @@
 import numpy as np
+
+
 class AccuracyCounter:
     """
     in supervised learning, we often want to count the test accuracy.
@@ -7,11 +9,10 @@ class AccuracyCounter:
     this class is a simple class for counting accuracy.
 
     usage::
-
         counter = AccuracyCounter()
         iterate over test set:
             counter.addOneBatch(predict, label) -> return accuracy in this mini-batch
-        counter.reportAccuracy() -> return accuracy over whole test set
+            counter.reportAccuracy() -> return accuracy over whole test set
     """
 
     def __init__(self):

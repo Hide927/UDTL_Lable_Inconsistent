@@ -1,6 +1,3 @@
-#!/usr/bin/python
-# -*- coding:utf-8 -*-
-
 import logging
 import os
 import time
@@ -9,11 +6,11 @@ import math
 import torch
 from torch import nn
 from torch import optim
-
 import models
 import datasets
 
 # Adapted from https://github.com/thuml/PADA
+
 
 class train_utils(object):
     def __init__(self, args, save_dir):
@@ -40,20 +37,18 @@ class train_utils(object):
             self.device_count = 1
             logging.info('using {} cpu'.format(self.device_count))
 
-
         # Load the datasets
         Dataset = getattr(datasets, args.data_name)
         self.datasets = {}
         if isinstance(args.transfer_task[0], str):
-           #print(args.transfer_task)
-           args.transfer_task = eval("".join(args.transfer_task))
-        if args.inconsistent=="PADA":
+            # print(args.transfer_task)
+            args.transfer_task = eval("".join(args.transfer_task))
+        if args.inconsistent == "PADA":
             self.datasets['source_train'], self.datasets['source_val'], self.datasets['target_train'], self.datasets['target_val'], self.num_classes\
                 = Dataset(args.data_dir, args.transfer_task, args.inconsistent, args.normlizetype).data_split(transfer_learning=True)
-        else:
-            self.datasets['source_train'], self.datasets['source_val'], self.datasets['target_train'], self.datasets['target_val'] \
-                = Dataset(args.data_dir, args.transfer_task, args.normlizetype).data_split(transfer_learning=True)
-
+        # else:
+        #     self.datasets['source_train'], self.datasets['source_val'], self.datasets['target_train'], self.datasets['target_val'] \
+        #         = Dataset(args.data_dir, args.transfer_task, args.normlizetype).data_split(transfer_learning=True)
 
         self.dataloaders = {x: torch.utils.data.DataLoader(self.datasets[x], batch_size=args.batch_size,
                                                            shuffle=(True if x.split('_')[1] == 'train' else False),
@@ -81,22 +76,22 @@ class train_utils(object):
             self.max_iter = len(self.dataloaders['source_train']) * (args.max_epoch - args.middle_epoch)
             if args.bottleneck:
                 self.AdversarialNet = getattr(models, 'AdversarialNet')(in_feature=args.bottleneck_num,
-                                                                            hidden_size=args.hidden_size, max_iter=self.max_iter,
-                                                                            trade_off_adversarial=args.trade_off_adversarial,
-                                                                            lam_adversarial=args.lam_adversarial
-                                                                            )
+                                                                        hidden_size=args.hidden_size, max_iter=self.max_iter,
+                                                                        trade_off_adversarial=args.trade_off_adversarial,
+                                                                        lam_adversarial=args.lam_adversarial
+                                                                        )
             else:
                 self.AdversarialNet = getattr(models, 'AdversarialNet')(in_feature=self.model.output_num(),
-                                                                            hidden_size=args.hidden_size, max_iter=self.max_iter,
-                                                                            trade_off_adversarial=args.trade_off_adversarial,
-                                                                            lam_adversarial=args.lam_adversarial
-                                                                            )
+                                                                        hidden_size=args.hidden_size, max_iter=self.max_iter,
+                                                                        trade_off_adversarial=args.trade_off_adversarial,
+                                                                        lam_adversarial=args.lam_adversarial
+                                                                        )
 
         if self.device_count > 1:
             self.model = torch.nn.DataParallel(self.model)
             if args.bottleneck:
                 self.bottleneck_layer = torch.nn.DataParallel(self.bottleneck_layer)
-            if args.inconsistent =="PADA":
+            if args.inconsistent == "PADA":
                 self.AdversarialNet = torch.nn.DataParallel(self.AdversarialNet)
             self.classifier_layer = torch.nn.DataParallel(self.classifier_layer)
 
@@ -111,15 +106,14 @@ class train_utils(object):
                 parameter_list = [{"params": self.model.parameters(), "lr": args.lr},
                                   {"params": self.classifier_layer.parameters(), "lr": args.lr},
                                   {"params": self.AdversarialNet.parameters(), "lr": args.lr}]
-        else:
-            if args.bottleneck:
-                parameter_list = [{"params": self.model.parameters(), "lr": args.lr},
-                                  {"params": self.bottleneck_layer.parameters(), "lr": args.lr},
-                                  {"params": self.classifier_layer.parameters(), "lr": args.lr}]
-            else:
-                parameter_list = [{"params": self.model.parameters(), "lr": args.lr},
-                                  {"params": self.classifier_layer.parameters(), "lr": args.lr}]
-
+        # else:
+        #     if args.bottleneck:
+        #         parameter_list = [{"params": self.model.parameters(), "lr": args.lr},
+        #                           {"params": self.bottleneck_layer.parameters(), "lr": args.lr},
+        #                           {"params": self.classifier_layer.parameters(), "lr": args.lr}]
+        #     else:
+        #         parameter_list = [{"params": self.model.parameters(), "lr": args.lr},
+        #                           {"params": self.classifier_layer.parameters(), "lr": args.lr}]
 
         # Define the optimizer
         if args.opt == 'sgd':
@@ -130,7 +124,6 @@ class train_utils(object):
                                         weight_decay=args.weight_decay)
         else:
             raise Exception("optimizer not implement")
-
 
         # Define the learning rate decay
         if args.lr_scheduler == 'step':
@@ -146,9 +139,7 @@ class train_utils(object):
         else:
             raise Exception("lr schedule not implement")
 
-
         self.start_epoch = 0
-
 
         # Invert the model and define the loss
         self.model.to(self.device)
@@ -159,7 +150,6 @@ class train_utils(object):
         self.classifier_layer.to(self.device)
 
         self.criterion = nn.CrossEntropyLoss()
-
 
     def train(self):
         """
@@ -176,7 +166,9 @@ class train_utils(object):
         step_start = time.time()
 
         for epoch in range(self.start_epoch, args.max_epoch):
+
             logging.info('-'*5 + 'Epoch {}/{}'.format(epoch, args.max_epoch - 1) + '-'*5)
+
             # Update the learning rate
             if self.lr_scheduler is not None:
                 # self.lr_scheduler.step(epoch)
@@ -186,8 +178,10 @@ class train_utils(object):
 
             iter_target = iter(self.dataloaders['target_train'])
             len_target_loader = len(self.dataloaders['target_train'])
+
             # Each epoch has a training and val phase
             for phase in ['source_train', 'source_val', 'target_val']:
+
                 # Define the temp variable
                 epoch_start = time.time()
                 epoch_acc = 0
@@ -216,7 +210,7 @@ class train_utils(object):
                         labels = labels.to(self.device)
                     else:
                         source_inputs = inputs
-                        target_inputs, _ = iter_target.next()
+                        target_inputs, _ = next(iter_target)
                         inputs = torch.cat((source_inputs, target_inputs), dim=0)
                         inputs = inputs.to(self.device)
                         labels = labels.to(self.device)
@@ -224,28 +218,30 @@ class train_utils(object):
                         iter_target = iter(self.dataloaders['target_train'])
 
                     with torch.set_grad_enabled(phase == 'source_train'):
+                        
                         # forward
                         features = self.model(inputs)
                         if args.bottleneck:
                             features = self.bottleneck_layer(features)
-                        outputs = self.classifier_layer(features)
+                        outputs = self.classifier_layer(features)  # 线性输出
+                        
                         if phase != 'source_train' or epoch < args.middle_epoch:
                             logits = outputs
                             loss = self.criterion(logits, labels)
                         else:
+                            # --------------- 迁移学习阶段 ---------------
                             logits = outputs.narrow(0, 0, labels.size(0))
                             classifier_loss = self.criterion(logits, labels)
 
                             if args.inconsistent == 'PADA':
-                                if epoch % 3 == 0:
-                                    self.model.train(False)
+                                if epoch % 3 == 0:  # 每 3 epoch 更新权重
+                                    self.model.train(False)  # model.train(False) = model.eval() (后者实现中调用前者而已)
                                     if args.bottleneck:
                                         self.bottleneck_layer.train(False)
                                     self.classifier_layer.train(False)
 
                                     start_test = True
-                                    for _, (target_inputs, target_labels) in enumerate(
-                                            self.dataloaders['target_train']):
+                                    for _, (target_inputs, target_labels) in enumerate(self.dataloaders['target_train']):
                                         target_inputs = target_inputs.to(self.device)
                                         target_features = self.model(target_inputs)
                                         if args.bottleneck:
@@ -256,34 +252,35 @@ class train_utils(object):
                                             all_softmax_output = softmax_outputs.data.cpu().float()
                                             start_test = False
                                         else:
-                                            all_softmax_output = torch.cat(
+                                            all_softmax_output = torch.cat(  # 得到所有目标域数据的softmax输出
                                                 (all_softmax_output, softmax_outputs.data.cpu().float()), 0)
 
-                                    class_weight = torch.mean(all_softmax_output, 0)
-                                    class_weight = (class_weight / torch.mean(class_weight)).cuda().view(-1)
+                                    class_weight = torch.mean(all_softmax_output, 0)  # 每类对所有目标域样本求平均，维度为 1 * 源域类别
+                                    class_weight = (class_weight / torch.mean(class_weight)).cuda().view(-1)  # 不明白这里为什么除以均值？再归一化一下？(PADA源码也是这样写的)
                                     self.criterion = nn.CrossEntropyLoss(weight=class_weight)
+
                                 self.model.train(True)
                                 if args.bottleneck:
                                     self.bottleneck_layer.train(True)
                                 self.classifier_layer.train(True)
-                                weight_ad = torch.zeros(inputs.size(0))
+
+                                weight_ad = torch.zeros(inputs.size(0))  # 源域 + 目标域
                                 label_numpy = labels.data.cpu().numpy()
                                 for j in range(labels.size(0)):
-                                    weight_ad[j] = class_weight[int(label_numpy[j])]
-                                weight_ad = weight_ad / torch.max(weight_ad[0:labels.size(0)])
+                                    weight_ad[j] = class_weight[int(label_numpy[j])]  # 给源域样本设置权重
+                                weight_ad = weight_ad / torch.max(weight_ad[0:labels.size(0)])  # gamma / max(gamma) (这样下来上面交叉熵损失的权重和这里判别损失权重不一致？与论文公式略有不符)
                                 for j in range(labels.size(0), inputs.size(0)):
-                                    weight_ad[j] = 1.0
+                                    weight_ad[j] = 1.0  # 目标域样本设置权重为 1
+
                                 domain_label_source = torch.ones(labels.size(0)).float()
                                 domain_label_target = torch.zeros(inputs.size(0) - labels.size(0)).float()
-                                adversarial_label = torch.cat((domain_label_source, domain_label_target), dim=0).to(
-                                    self.device)
+                                adversarial_label = torch.cat((domain_label_source, domain_label_target), dim=0).to(self.device)
                                 adversarial_out = self.AdversarialNet(features)
                                 inconsistent_loss = nn.BCELoss(weight=weight_ad.view(-1).to(self.device))(
                                     adversarial_out.view(-1), adversarial_label.view(-1))
                                 classifier_loss = self.criterion(outputs.narrow(0, 0, labels.size(0)), labels)
 
                             loss = classifier_loss + inconsistent_loss
-
 
                         pred = logits.argmax(dim=1)
                         correct = torch.eq(pred, labels).float().sum().item()
@@ -312,17 +309,17 @@ class train_utils(object):
                                 batch_time = train_time / args.print_step if step != 0 else train_time
                                 sample_per_sec = 1.0 * batch_count / train_time
                                 logging.info('Epoch: {} [{}/{}], Train Loss: {:.4f} Train Acc: {:.4f},'
-                                             '{:.1f} examples/sec {:.2f} sec/batch'.format(
-                                    epoch, batch_idx * len(labels), len(self.dataloaders[phase].dataset),
-                                    batch_loss, batch_acc, sample_per_sec, batch_time
-                                ))
+                                             '{:.1f} samples/sec {:.2f} sec/batch'.format(
+                                                 epoch, batch_idx * len(labels), 
+                                                 len(self.dataloaders[phase].dataset),
+                                                 batch_loss, batch_acc, sample_per_sec, batch_time
+                                             ))
                                 batch_acc = 0
                                 batch_loss = 0.0
                                 batch_count = 0
                             step += 1
 
                 # Print the train and val information via each epoch
-
                 epoch_loss = epoch_loss / epoch_length
                 epoch_acc = epoch_acc / epoch_length
 
@@ -340,20 +337,5 @@ class train_utils(object):
                         torch.save(model_state_dic,
                                    os.path.join(self.save_dir, '{}-{:.4f}-best_model.pth'.format(epoch, best_acc)))
 
-
             if self.lr_scheduler is not None:
                 self.lr_scheduler.step()
-
-
-
-
-
-
-
-
-
-
-
-
-
-

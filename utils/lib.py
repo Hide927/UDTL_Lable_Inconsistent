@@ -2,20 +2,23 @@ import torch
 import torch.nn as nn
 import numpy as np
 
+
 def reverse_sigmoid(y):
     return torch.log(y / (1.0 - y + 1e-10) + 1e-10)
 
 
 def get_source_share_weight(domain_out, before_softmax, domain_temperature=1.0, class_temperature=10.0):
+
     before_softmax = before_softmax / class_temperature
-    after_softmax = nn.Softmax(-1)(before_softmax)
+    after_softmax = nn.Softmax(-1)(before_softmax)  # 分类器输出 y_hat
+
     domain_logit = reverse_sigmoid(domain_out)
     domain_logit = domain_logit / domain_temperature
-    domain_out = nn.Sigmoid()(domain_logit)
-    
-    entropy = torch.sum(- after_softmax * torch.log(after_softmax + 1e-10), dim=1, keepdim=True)
-    entropy_norm = entropy / np.log(after_softmax.size(1))
-    weight = entropy_norm - domain_out
+    domain_out = nn.Sigmoid()(domain_logit)  # 非对抗性域判别输出 d'
+
+    entropy = torch.sum(- after_softmax * torch.log(after_softmax + 1e-10), dim=1, keepdim=True)  # H(y_hat)
+    entropy_norm = entropy / np.log(after_softmax.size(1))  # H(y_hat) / log |Cs|
+    weight = entropy_norm - domain_out  # Ws
     weight = weight.detach()
     return weight
 

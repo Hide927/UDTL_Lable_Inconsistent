@@ -1,7 +1,6 @@
-#!/usr/bin/python
-# -*- coding:utf-8 -*-
 from torch import nn
 import warnings
+
 
 # ----------------------------inputsize >=28-------------------------------------------------------------------------
 class CNN(nn.Module):
@@ -11,28 +10,26 @@ class CNN(nn.Module):
             warnings.warn("Pretrained model is not available")
 
         self.layer1 = nn.Sequential(
-            nn.Conv1d(in_channel, 16, kernel_size=15),  # 16, 26 ,26
+            nn.Conv1d(in_channel, 16, kernel_size=15),  # 16 * 1010
             nn.BatchNorm1d(16),
             nn.ReLU(inplace=True))
 
-
         self.layer2 = nn.Sequential(
-            nn.Conv1d(16, 32, kernel_size=3),  # 32, 24, 24
+            nn.Conv1d(16, 32, kernel_size=3),  # 32 * 1008
             nn.BatchNorm1d(32),
             nn.ReLU(inplace=True),
             nn.MaxPool1d(kernel_size=2, stride=2),
-            )  # 32, 12,12     (24-2) /2 +1
+        )  # 32 * 504
 
         self.layer3 = nn.Sequential(
-            nn.Conv1d(32, 64, kernel_size=3),  # 64,10,10
+            nn.Conv1d(32, 64, kernel_size=3),  # 64 * 502
             nn.BatchNorm1d(64),
             nn.ReLU(inplace=True))
 
         self.layer4 = nn.Sequential(
-            nn.Conv1d(64, 128, kernel_size=3),  # 128,8,8
-            nn.BatchNorm1d(128),
+            nn.Conv1d(64, 128, kernel_size=3),  # 128 * 500
             nn.ReLU(inplace=True),
-            nn.AdaptiveMaxPool1d(4))  # 128, 4,4
+            nn.AdaptiveMaxPool1d(4))  # 128 * 4
 
         self.layer5 = nn.Sequential(
             nn.Linear(128 * 4, 256),
@@ -54,4 +51,3 @@ class CNN(nn.Module):
         x = self.fc(x)
 
         return x
-
