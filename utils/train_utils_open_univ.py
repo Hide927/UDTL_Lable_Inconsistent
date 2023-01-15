@@ -266,20 +266,24 @@ class train_utils_open_univ(object):
                                 inconsistent_loss = self.inconsistent_loss(output_t_prob_unk, 
                                                                     torch.tensor([args.th] * args.batch_size).to(self.device))  # th为阈值
                             else:
-                                # 对比了 UDA 的源码
-                                # 个人觉得此处应该使用 self.AdversarialNet() 
-                                # 不加 detach 输出的是对抗性的 domain_prob，加 detach 输出的是非对抗性的 domain_prob
-                                domain_prob_source = self.AdversarialNet_auxiliary.forward(
-                                    features.narrow(0, 0, labels.size(0)).detach())  # 源域非对抗性域判别输出
-                                domain_prob_target = self.AdversarialNet_auxiliary.forward(
-                                    features.narrow(0, labels.size(0), inputs.size(0) - labels.size(0)).detach())  # 目标域非对抗性域判别输出
+                                domain_prob_source = self.AdversarialNet.forward(
+                                    features.narrow(0, 0, labels.size(0)))
+                                domain_prob_target = self.AdversarialNet.forward(
+                                    features.narrow(0, labels.size(0), inputs.size(0) - labels.size(0)))
+                                
+                                # 参考 UAN 源码，感觉这里应该还是用 self.AdversarialNet()，然后加 .detach()
+                                # 也就是说 self.AdversarialNet_auxiliary() 应该是不需要的，UAN 源码中就是只有一个判别网络
+                                domain_prob_source_auxiliary = self.AdversarialNet.forward(
+                                    features.narrow(0, 0, labels.size(0)).detach())
+                                domain_prob_target_auxiliary = self.AdversarialNet.forward(
+                                    features.narrow(0, labels.size(0), inputs.size(0) - labels.size(0)).detach())
 
                                 source_share_weight = get_source_share_weight(
-                                    domain_prob_source, outputs.narrow(0, 0, labels.size(0)), domain_temperature=1.0,
+                                    domain_prob_source_auxiliary, outputs.narrow(0, 0, labels.size(0)), domain_temperature=1.0,
                                     class_temperature=10.0)
                                 source_share_weight = normalize_weight(source_share_weight)  # Ws
                                 target_share_weight = get_target_share_weight(
-                                    domain_prob_target, outputs.narrow(0, labels.size(0), inputs.size(0) - labels.size(0)),
+                                    domain_prob_target_auxiliary, outputs.narrow(0, labels.size(0), inputs.size(0) - labels.size(0)),
                                     domain_temperature=1.0, class_temperature=1.0)
                                 target_share_weight = normalize_weight(target_share_weight)  # Wt
 
@@ -295,8 +299,8 @@ class train_utils_open_univ(object):
                                 adv_loss += torch.mean(tmp, dim=0, keepdim=True)
 
                                 # 非对抗性判别损失(不加权)
-                                adv_loss_auxiliary += nn.BCELoss()(domain_prob_source, torch.ones_like(domain_prob_source))
-                                adv_loss_auxiliary += nn.BCELoss()(domain_prob_target, torch.zeros_like(domain_prob_target))
+                                adv_loss_auxiliary += nn.BCELoss()(domain_prob_source_auxiliary, torch.ones_like(domain_prob_source_auxiliary))
+                                adv_loss_auxiliary += nn.BCELoss()(domain_prob_target_auxiliary, torch.zeros_like(domain_prob_target_auxiliary))
 
                                 inconsistent_loss = adv_loss + adv_loss_auxiliary
 
