@@ -8,10 +8,9 @@ from datasets.SequenceDatasets import dataset
 from datasets.sequence_aug import *
 from tqdm import tqdm
 
+# Digital data was collected at 12,000 samples per second
 signal_size = 1024
-datasetname = ["12k Drive End Bearing Fault Data", "12k Fan End Bearing Fault Data",
-               "48k Drive End Bearing Fault Data", "Normal Baseline Data"]
-axis = ["_DE_time", "_FE_time", "_BA_time"]
+# Normal Baseline Data & 12k Drive End Bearing Fault Data
 dataname = {
     # 1797rpm
     0: ["97.mat", "105.mat", "118.mat", "130.mat", "169.mat", "185.mat", "197.mat", "209.mat", "222.mat", "234.mat"],
@@ -22,6 +21,9 @@ dataname = {
     # 1730rpm
     3: ["100.mat", "108.mat", "121.mat", "133.mat", "172.mat", "188.mat", "200.mat", "212.mat", "225.mat", "237.mat"]
 }
+datasetname = ["12k Drive End Bearing Fault Data", "12k Fan End Bearing Fault Data",
+               "48k Drive End Bearing Fault Data", "Normal Baseline Data"]
+axis = ["_DE_time", "_FE_time", "_BA_time"]
 label = [i for i in range(0, 10)]
 
 
@@ -49,15 +51,10 @@ def dataset_information(source_N, target_N, label_inconsistent):
 
 
 def get_files(root, N, name, label):
-    '''
-    This function is used to generate the final training set and test set.
-    root:The location of the data set
-    '''
     data = []
     lab = []
     for k in range(len(N)):
         for i, n in enumerate(name):
-            # print(n)
             if int(dataname[N[k]][n].split(".")[0]) < 101:
                 path1 = os.path.join(root, datasetname[3], dataname[N[k]][n])
             else:
@@ -65,16 +62,10 @@ def get_files(root, N, name, label):
             data1, lab1 = data_load(path1, dataname[N[k]][n], label=label[i])
             data += data1
             lab += lab1
-
     return [data, lab]
 
 
 def data_load(filename, axisname, label):
-    '''
-    This function is mainly used to generate test data and training data.
-    filename:Data location
-    axisname:Select which channel's data,---->"_DE_time","_FE_time","_BA_time"
-    '''
     datanumber = axisname.split(".")
     if eval(datanumber[0]) < 100:
         realaxis = "X0" + datanumber[0] + axis[0]
@@ -94,23 +85,23 @@ def data_load(filename, axisname, label):
         lab.append(label)
         start += signal_size
         end += signal_size
-
     return data, lab
 
 
 class CWRUFFT_inconsistent(object):
+    # num_classes = 10
     inputchannel = 1
 
-    def __init__(self, data_dir, transfer_task, inconsistent, normlizetype="0-1"):
+    def __init__(self, data_dir, transfer_task, inconsistent, normalizetype="0-1"):
         self.data_dir = data_dir
         self.source_N = transfer_task[0]
         self.target_N = transfer_task[1]
-        self.normlizetype = normlizetype
+        self.normalizetype = normalizetype
         self.inconsistent = inconsistent
         self.data_transforms = {
             'train': Compose([
                 Reshape(),
-                Normalize(self.normlizetype),
+                Normalize(self.normalizetype),
                 # RandomAddGaussian(),
                 # RandomScale(),
                 # RandomStretch(),
@@ -120,7 +111,7 @@ class CWRUFFT_inconsistent(object):
             ]),
             'val': Compose([
                 Reshape(),
-                Normalize(self.normlizetype),
+                Normalize(self.normalizetype),
                 Retype(),
                 # Scale(1)
             ])
@@ -157,23 +148,22 @@ class CWRUFFT_inconsistent(object):
 
             return source_train, source_val, target_train, target_val, num_classes
         else:
-            pass
             # get source train and val
-            # list_data = get_files(self.data_dir, self.source_N)
-            # data_pd = pd.DataFrame(
-            #     {"data": list_data[0], "label": list_data[1]})
-            # train_pd, val_pd = train_test_split(
-            #     data_pd, test_size=0.2, random_state=40, stratify=data_pd["label"])
-            # source_train = dataset(
-            #     list_data=train_pd, transform=self.data_transforms['train'])
-            # source_val = dataset(
-            #     list_data=val_pd, transform=self.data_transforms['val'])
+            list_data = get_files(self.data_dir, self.source_N)
+            data_pd = pd.DataFrame(
+                {"data": list_data[0], "label": list_data[1]})
+            train_pd, val_pd = train_test_split(
+                data_pd, test_size=0.2, random_state=40, stratify=data_pd["label"])
+            source_train = dataset(
+                list_data=train_pd, transform=self.data_transforms['train'])
+            source_val = dataset(
+                list_data=val_pd, transform=self.data_transforms['val'])
 
             # # get target val
-            # list_data = get_files(self.data_dir, self.target_N)
-            # data_pd = pd.DataFrame(
-            #     {"data": list_data[0], "label": list_data[1]})
-            # target_val = dataset(
-            #     list_data=data_pd, transform=self.data_transforms['val'])
+            list_data = get_files(self.data_dir, self.target_N)
+            data_pd = pd.DataFrame(
+                {"data": list_data[0], "label": list_data[1]})
+            target_val = dataset(
+                list_data=data_pd, transform=self.data_transforms['val'])
             
-            # return source_train, source_val, target_val
+            return source_train, source_val, target_val

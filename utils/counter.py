@@ -27,10 +27,10 @@ class AccuracyCounter:
         Ntotal = len(label)
         self.Ncorrect += Ncorrect
         self.Ntotal += Ntotal
-        return Ncorrect / Ntotal
+        return Ncorrect / Ntotal  # one batch accuracy
 
     def reportAccuracy(self):
         """
         :return: **return nan when 0 / 0**
         """
-        return np.asarray(self.Ncorrect, dtype=float) / np.asarray(self.Ntotal, dtype=float)
+        return np.asarray(self.Ncorrect, dtype=float) / np.asarray(self.Ntotal, dtype=float)  # total accuracy

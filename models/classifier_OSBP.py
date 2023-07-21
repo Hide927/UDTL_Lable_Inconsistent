@@ -3,6 +3,7 @@ import numpy as np
 
 
 def calc_coeff(iter_num, high=1.0, low=0.0, alpha=10.0, max_iter=10000.0):
+    """渐进式训练: 权重系数从0-1变化"""
     return np.float(2.0 * (high - low) / (1.0 + np.exp(-alpha * iter_num / max_iter)) - (high - low) + low)
 
 

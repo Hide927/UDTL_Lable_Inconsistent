@@ -18,8 +18,8 @@ class CNN(nn.Module):
             nn.Conv1d(16, 32, kernel_size=3),  # 32 * 1008
             nn.BatchNorm1d(32),
             nn.ReLU(inplace=True),
-            nn.MaxPool1d(kernel_size=2, stride=2),
-        )  # 32 * 504
+            nn.MaxPool1d(kernel_size=2, stride=2),  # 32 * 504
+        )
 
         self.layer3 = nn.Sequential(
             nn.Conv1d(32, 64, kernel_size=3),  # 64 * 502
@@ -28,6 +28,7 @@ class CNN(nn.Module):
 
         self.layer4 = nn.Sequential(
             nn.Conv1d(64, 128, kernel_size=3),  # 128 * 500
+            nn.BatchNorm1d(128),
             nn.ReLU(inplace=True),
             nn.AdaptiveMaxPool1d(4))  # 128 * 4
 

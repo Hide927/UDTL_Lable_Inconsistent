@@ -22,11 +22,11 @@ def parse_args():
     parser.add_argument('--data_name', type=str,
                         default='CWRUFFT_inconsistent', help='the name of the data')
     parser.add_argument('--data_dir', type=str,
-                        default='D:/data/CWRU', help='the directory of the data')
+                        default='E:\Dataset\CWRU', help='the directory of the data')
     parser.add_argument('--transfer_task', type=list,
                         default=[[0], [1]], help='transfer learning tasks')
-    parser.add_argument('--normlizetype', type=str,
-                        default='mean-std', help='nomalization type')
+    parser.add_argument('--normalizetype', type=str,
+                        default='mean-std', help='normalization type')
 
     # training parameters
     parser.add_argument('--cuda_device', type=str,
@@ -40,13 +40,15 @@ def parse_args():
     parser.add_argument('--num_workers', type=int, default=0,
                         help='the number of training process')
 
+    # bottleneck
     parser.add_argument('--bottleneck', type=bool, default=True,
                         help='whether using the bottleneck layer')
     parser.add_argument('--bottleneck_num', type=int,
-                        default=256, help='whether using the bottleneck layer')
-    parser.add_argument('--last_batch', type=bool,
+                        default=256, help='size of the bottleneck layer')
+    parser.add_argument('--drop_last', type=bool,
                         default=False, help='whether using the last batch')
 
+    # adversarial parameters
     parser.add_argument('--hidden_size', type=int,
                         default=1024, help='whether using the last batch')
     parser.add_argument('--trade_off_adversarial',
@@ -55,7 +57,8 @@ def parse_args():
                         default=1, help='this is used for Cons')
 
     # optimization information
-    parser.add_argument('--opt', type=str, choices=['sgd', 'adam'], default='adam', help='the optimizer')
+    parser.add_argument(
+        '--opt', type=str, choices=['sgd', 'adam'], default='adam', help='the optimizer')
     parser.add_argument('--lr', type=float, default=1e-3,
                         help='the initial learning rate')
     parser.add_argument('--momentum', type=float,
@@ -71,15 +74,16 @@ def parse_args():
 
     # save, load and display information
     parser.add_argument('--middle_epoch', type=int,
-                        default=0, help='max number of epoch')
+                        default=0, help='pretrained number of epoch')
     parser.add_argument('--max_epoch', type=int,
                         default=300, help='max number of epoch')
     parser.add_argument('--print_step', type=int, default=50,
                         help='the interval of log training information')
-
+    
+    # inconsistent setting
     parser.add_argument('--inconsistent', type=str, choices=[
-                        'PADA', 'OSBP', 'UAN'], default='PADA', help='which adversarial loss you use')
-    parser.add_argument('--th', type=float, default=0.5, help='theshold')
+                        'PADA', 'OSBP', 'UAN'], default='PADA', help='inconsistent setting')
+    parser.add_argument('--th', type=float, default=0.5, help='threshold')
 
     args = parser.parse_args()
     return args

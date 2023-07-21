@@ -41,16 +41,14 @@ class train_utils_open_univ(object):
         Dataset = getattr(datasets, args.data_name)
         self.datasets = {}
         if isinstance(args.transfer_task[0], str):
-            # print(args.transfer_task)
             args.transfer_task = eval("".join(args.transfer_task))
         self.datasets['source_train'], self.datasets['source_val'], self.datasets['target_train'], self.datasets['target_val'], self.num_classes = Dataset(
-            args.data_dir, args.transfer_task, args.inconsistent, args.normlizetype).data_split(transfer_learning=True)
-
+            args.data_dir, args.transfer_task, args.inconsistent, args.normalizetype).data_split(transfer_learning=True)
         self.dataloaders = {x: torch.utils.data.DataLoader(self.datasets[x], batch_size=args.batch_size,
                                                            shuffle=(True if x.split('_')[1] == 'train' else False),
                                                            num_workers=args.num_workers,
                                                            pin_memory=(True if self.device == 'cuda' else False),
-                                                           drop_last=(True if args.last_batch and x.split('_')[1] == 'train' else False))
+                                                           drop_last=(True if args.drop_last and x.split('_')[1] == 'train' else False))
                             for x in ['source_train', 'source_val', 'target_train', 'target_val']}
 
         # Define the model
@@ -73,7 +71,7 @@ class train_utils_open_univ(object):
                                                                            trade_off_adversarial=args.trade_off_adversarial,
                                                                            lam_adversarial=args.lam_adversarial
                                                                            )
-        else:  # UAN
+        else:
             if args.bottleneck:
                 self.classifier_layer = nn.Linear(args.bottleneck_num, self.num_classes)
                 self.AdversarialNet = getattr(models, 'AdversarialNet')(in_feature=args.bottleneck_num,
@@ -82,7 +80,7 @@ class train_utils_open_univ(object):
                                                                         trade_off_adversarial=args.trade_off_adversarial,
                                                                         lam_adversarial=args.lam_adversarial
                                                                         )
-                self.AdversarialNet_auxiliary = getattr(models, 'AdversarialNet_auxiliary')(in_feature=args.bottleneck_num,
+                self.AdversarialNet_auxiliary = getattr(models, 'AdversarialNet_auxiliary')(in_feature=args.bottleneck_num, 
                                                                                             hidden_size=args.hidden_size)
             else:
                 self.classifier_layer = nn.Linear(self.model.output_num(), self.num_classes)
@@ -92,7 +90,8 @@ class train_utils_open_univ(object):
                                                                         trade_off_adversarial=args.trade_off_adversarial,
                                                                         lam_adversarial=args.lam_adversarial
                                                                         )
-                self.AdversarialNet_auxiliary = getattr(models, 'AdversarialNet_auxiliary')(in_feature=self.model.output_num(), hidden_size=args.hidden_size)
+                self.AdversarialNet_auxiliary = getattr(models, 'AdversarialNet_auxiliary')(in_feature=self.model.output_num(), 
+                                                                                            hidden_size=args.hidden_size)
         
         if args.bottleneck:
             self.model_all = nn.Sequential(self.model, self.bottleneck_layer, self.classifier_layer)
@@ -179,16 +178,19 @@ class train_utils_open_univ(object):
 
         step = 0
         best_hscore = 0.0
+
         batch_count = 0
         batch_loss = 0.0
         batch_acc = 0
+
         step_start = time.time()
 
         for epoch in range(self.start_epoch, args.max_epoch):
 
+            # Print current epoch
             logging.info('-'*5 + 'Epoch {}/{}'.format(epoch, args.max_epoch - 1) + '-'*5)
 
-            # Update the learning rate
+            # Print current learning rate
             if self.lr_scheduler is not None:
                 logging.info('current lr: {}'.format(self.lr_scheduler.get_lr()))
             else:
@@ -207,7 +209,7 @@ class train_utils_open_univ(object):
                 epoch_length = 0
 
                 if phase == 'target_val':
-                    counters = [AccuracyCounter() for x in range(self.num_classes + 1)]
+                    counters = [AccuracyCounter() for _ in range(self.num_classes + 1)]
 
                 # Set model to train mode or test mode
                 if phase == 'source_train':
@@ -243,39 +245,40 @@ class train_utils_open_univ(object):
 
                     with torch.set_grad_enabled(phase == 'source_train'):
 
-                        # forward
+                        # Forward
                         features = self.model(inputs)
                         if args.bottleneck:
                             features = self.bottleneck_layer(features)
-                        outputs = self.classifier_layer(features)  # 线性输出
-# -------------------------------------------------------------------------------------------------
+                        outputs = self.classifier_layer(features)
+
                         if phase != 'source_train':
                             logits = outputs
                             if not (phase == 'target_val' and args.inconsistent == "UAN"):
                                 loss = self.criterion(logits, labels)
+                            if phase == 'target_val' and args.inconsistent == "UAN":
+                                domain_prob_target_auxiliary = self.AdversarialNet_auxiliary.forward(features)
+                                target_share_weight = get_target_share_weight(
+                                    domain_prob_target_auxiliary, outputs, domain_temperature=1.0, class_temperature=1.0)
                         else:
-                            # --------------- 训练阶段 ---------------
+                            # --------------- For transfer learning ---------------
                             logits = outputs.narrow(0, 0, labels.size(0))
-                            classifier_loss = self.criterion(logits, labels)  # 源域数据分类损失
+                            classifier_loss = self.criterion(logits, labels)
 
                             if args.inconsistent == 'OSBP':
-                                output_t = self.classifier_layer(  # 目标域数据分类输出
+                                output_t = self.classifier_layer(
                                     features.narrow(0, labels.size(0), inputs.size(0) - labels.size(0)), adaption=True)
-                                output_t_prob_unk = F.softmax(output_t, dim=1)[:, -1]  # 目标域数据 C+1 概率
-                                # print(output_t_prob_unk)
+                                output_t_prob_unk = F.softmax(output_t, dim=1)[:, -1]  # 目标域数据未知类概率
                                 inconsistent_loss = self.inconsistent_loss(output_t_prob_unk, 
-                                                                    torch.tensor([args.th] * args.batch_size).to(self.device))  # th为阈值
+                                                                    torch.tensor([args.th] * args.batch_size).to(self.device))  # th 为阈值
                             else:
                                 domain_prob_source = self.AdversarialNet.forward(
                                     features.narrow(0, 0, labels.size(0)))
                                 domain_prob_target = self.AdversarialNet.forward(
                                     features.narrow(0, labels.size(0), inputs.size(0) - labels.size(0)))
                                 
-                                # 参考 UAN 源码，感觉这里应该还是用 self.AdversarialNet()，然后加 .detach()
-                                # 也就是说 self.AdversarialNet_auxiliary() 应该是不需要的，UAN 源码中就是只有一个判别网络
-                                domain_prob_source_auxiliary = self.AdversarialNet.forward(
+                                domain_prob_source_auxiliary = self.AdversarialNet_auxiliary.forward(
                                     features.narrow(0, 0, labels.size(0)).detach())
-                                domain_prob_target_auxiliary = self.AdversarialNet.forward(
+                                domain_prob_target_auxiliary = self.AdversarialNet_auxiliary.forward(
                                     features.narrow(0, labels.size(0), inputs.size(0) - labels.size(0)).detach())
 
                                 source_share_weight = get_source_share_weight(
@@ -305,9 +308,8 @@ class train_utils_open_univ(object):
                                 inconsistent_loss = adv_loss + adv_loss_auxiliary
 
                             loss = classifier_loss + inconsistent_loss
-# -------------------------------------------------------------------------------------------------
-                        # target val 指标
-                        if phase == 'target_val' and args.inconsistent == "OSBP":
+
+                        if phase == 'target_val' and args.inconsistent == "OSBP":  # For target val(OSBP)
                             loss_temp = loss.item() * labels.size(0)
                             epoch_loss += loss_temp
                             epoch_length += labels.size(0)
@@ -316,30 +318,28 @@ class train_utils_open_univ(object):
                                 each_pred_id = np.argmax(each_predict.cpu())
                                 if each_pred_id == each_label:
                                     counters[each_label].Ncorrect += 1.0  # 每类正确数
-                        elif phase == 'target_val' and args.inconsistent == "UAN":
+                        elif phase == 'target_val' and args.inconsistent == "UAN":  # For target val(UAN)
                             for (each_predict, each_label, each_target_share_weight) in zip(logits, labels.cpu(), target_share_weight):
                                 if each_label < self.num_classes:  # 属于源域中的已知类
-                                    counters[each_label].Ntotal += 1.0  # 每类个数
+                                    counters[each_label].Ntotal += 1.0  # 每类的个数
                                     each_pred_id = np.argmax(each_predict.cpu())
-                                    # print(each_target_share_weight)
                                     if not (each_target_share_weight[0] < args.th) and each_pred_id == each_label:  # 大于阈值且分类正确
-                                        counters[each_label].Ncorrect += 1.0
+                                        counters[each_label].Ncorrect += 1.0  # 每类正确数
                                 else:
                                     counters[-1].Ntotal += 1.0  # 未知类样本个数
                                     if each_target_share_weight[0] < args.th:  # 小于阈值说明是未知类
                                         counters[-1].Ncorrect += 1.0
-                        # source train and val 指标
-                        else:  
+                        else:  # For source train and val
                             pred = logits.argmax(dim=1)
                             correct = torch.eq(pred, labels).float().sum().item()
                             loss_temp = loss.item() * labels.size(0)
                             epoch_loss += loss_temp
                             epoch_acc += correct
                             epoch_length += labels.size(0)
-# -------------------------------------------------------------------------------------------------
+
                         # Calculate the training information
                         if phase == 'source_train':
-                            # backward
+                            # Backward
                             self.optimizer.zero_grad()
                             loss.backward()
                             self.optimizer.step()
@@ -347,7 +347,6 @@ class train_utils_open_univ(object):
                             batch_loss += loss_temp
                             batch_acc += correct
                             batch_count += labels.size(0)
-
                             # Print the training information
                             if step % args.print_step == 0:
                                 batch_loss = batch_loss / batch_count
@@ -367,7 +366,7 @@ class train_utils_open_univ(object):
                                 batch_loss = 0.0
                                 batch_count = 0
                             step += 1
-# -------------------------------------------------------------------------------------------------
+
                 if phase == 'target_val':
                     correct = [x.Ncorrect for x in counters]
                     amount = [x.Ntotal for x in counters]
@@ -379,6 +378,7 @@ class train_utils_open_univ(object):
                     acc_class = acc_class[0][0]  # 类平均准确率
                     acc_all = np.sum(correct[0:]) / np.sum(amount[0:])  # 总准确率
                     hscore = 2 * common_acc * outlier_acc / (common_acc + outlier_acc)
+                    
                     if args.inconsistent == "OSBP":
                         epoch_loss = epoch_loss / epoch_length
                         logging.info(
@@ -389,14 +389,13 @@ class train_utils_open_univ(object):
                             'Epoch: {} {}-common_acc: {:.4f} outlier_acc: {:.4f} acc_class: {:.4f} acc_all: {:.4f} hscore: {:.4f}, Cost {:.1f} sec'.format(
                                 epoch, phase, common_acc, outlier_acc, acc_class, acc_all, hscore, time.time() - epoch_start))
                     
-                    # save the checkpoint for other learning
+                    # Save the checkpoint for other learning
                     model_state_dic = self.model_all.state_dict()
                     # save the best model according to the val accuracy
-
                     if hscore > best_hscore:
                         best_hscore = hscore
                         logging.info(
-                            "save best model_hscore epoch {}, common_acc: {:.4f} outlier_acc: {:.4f} acc_class: {:.4f} acc_all: {:.4f} best_hscore: {:.4f},".format(
+                            "save best model-hscore epoch {}, common_acc: {:.4f} outlier_acc: {:.4f} acc_class: {:.4f} acc_all: {:.4f} best_hscore: {:.4f},".format(
                                 epoch, common_acc, outlier_acc, acc_class, acc_all, best_hscore))
                         torch.save(model_state_dic, os.path.join(self.save_dir,
                                                                 '{}-{:.4f}-{:.4f}-{:.4f}-{:.4f}-{:.4f}.pth'.format(
